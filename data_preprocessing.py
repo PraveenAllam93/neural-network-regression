@@ -20,6 +20,21 @@ def delivery_partners(df, given_info, total_onshift_partners = False, total_busy
 def order_protocol_value(df, given_info):
     order_protocol = given_info[(given_info.created_at_weekday == df.created_at_weekday) & (given_info.market_id == df.market_id)]["order_protocol"]
     return order_protocol.iloc[0]
+
+def store_category(df, given_info, most_store_primary_category):
+    required_data = given_info[(given_info.created_at_hour == df.created_at_hour) & (given_info.created_at_weekday == df.created_at_weekday) & (given_info.market_id == df.market_id) & (given_info.store_id == df.store_id)][["store_primary_category", "subtotal"]]
+    if required_data.shape[0] == 0:
+        required_data = given_info[(given_info.created_at_hour == df.created_at_hour) & (given_info.created_at_weekday == df.created_at_weekday) & (given_info.market_id == df.market_id)][["store_primary_category", "subtotal"]]
+    if required_data.shape[0] == 0:
+        required_data = given_info[(given_info.created_at_hour == df.created_at_hour) & (given_info.created_at_weekday == df.created_at_weekday)][["store_primary_category", "subtotal"]]
+    if required_data.shape[0] == 0:
+        required_data = given_info[(given_info.created_at_hour == df.created_at_hour)][["store_primary_category", "subtotal"]]
+    if required_data.shape[0] == 0:
+        return most_store_primary_category    
+    
+    required_data["subtotal_diff"] = abs(required_data["subtotal"] - df.subtotal)
+    required_data.sort_values(by = ["subtotal_diff"], ascending = True, inplace = True)
+    return required_data.iloc[0,0]
     
 
 
@@ -92,8 +107,8 @@ print("--" * 90)
 
 print(f"filling NaN values in total_onshift_partners, total_busy_partners, total_outstanding_orders \n{'--' * 50}")
 
-train = pd.concat([X_train.reset_index(drop = True), y_train.reset_index(drop = True)], axis = 1)
-delivery_partners_grps = train.groupby(by = ["created_at_weekday", "created_at_hour"])[["total_onshift_partners", "total_busy_partners", "total_outstanding_orders"]].apply("mean").round().reset_index()
+# train = pd.concat([X_train.reset_index(drop = True), y_train.reset_index(drop = True)], axis = 1)
+delivery_partners_grps = X_train.groupby(by = ["created_at_weekday", "created_at_hour"])[["total_onshift_partners", "total_busy_partners", "total_outstanding_orders"]].apply("mean").round().reset_index()
 
 X_train.loc[X_train.total_onshift_partners.isna(), "total_onshift_partners"] = X_train.loc[X_train.total_onshift_partners.isna()].apply(delivery_partners, given_info = delivery_partners_grps, total_onshift_partners = True, axis = 1)
 X_train.loc[X_train.total_busy_partners.isna(), "total_busy_partners"] = X_train.loc[X_train.total_busy_partners.isna()].apply(delivery_partners, given_info = delivery_partners_grps, total_busy_partners = True, axis = 1)
@@ -116,10 +131,21 @@ print("--" * 90)
 
 print(f"filling NaN values in order_protocol\n{'--' * 50}")
 
-order_protocol_grps = df.groupby(by = ["created_at_weekday", "market_id"])["order_protocol"].apply(lambda x : x.mode()[0]).reset_index()
+order_protocol_grps = X_train.groupby(by = ["created_at_weekday", "market_id"])["order_protocol"].apply(lambda x : x.mode()[0]).reset_index()
 X_train.loc[X_train.order_protocol.isna(), "order_protocol"] = X_train.loc[X_train.order_protocol.isna()].apply(order_protocol_value, given_info = order_protocol_grps, axis = 1)
 X_test.loc[X_test.order_protocol.isna(), "order_protocol"] = X_test.loc[X_test.order_protocol.isna()].apply(order_protocol_value, given_info = order_protocol_grps, axis = 1)
 
+print(f"remaining missing valued features (train_data) = {X_train.columns[X_train.isna().sum() > 0].tolist()}")
+print("--" * 50)
+print(f"remaining missing valued features (test_data) = {X_test.columns[X_test.isna().sum() > 0].tolist()}")
+print("--" * 90)
+
+print(f"filling NaN values in store_primary_category\n{'--' * 50}")
+print("--" * 50)
+store_categories = X_train.groupby(by = ["created_at_hour", "created_at_weekday", "store_primary_category", "market_id", "store_id"])[["subtotal"]].apply("mean").reset_index()
+most_store_primary_category = X_train.store_primary_category.mode()[0]
+X_train.loc[X_train.store_primary_category.isna(), "store_primary_category"] = X_train[X_train.store_primary_category.isna()].apply(store_category, given_info = store_categories, most_store_primary_category = most_store_primary_category, axis = 1)
+X_test.loc[X_test.store_primary_category.isna(), "store_primary_category"] = X_test[X_test.store_primary_category.isna()].apply(store_category, given_info = store_categories, most_store_primary_category = most_store_primary_category, axis = 1)
 print(f"remaining missing valued features (train_data) = {X_train.columns[X_train.isna().sum() > 0].tolist()}")
 print("--" * 50)
 print(f"remaining missing valued features (test_data) = {X_test.columns[X_test.isna().sum() > 0].tolist()}")
