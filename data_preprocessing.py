@@ -2,43 +2,18 @@ import numpy as np
 import pandas as pd
 from IPython.display import display
 
+import warnings 
+warnings.filterwarnings('ignore')
+
 from sklearn.model_selection import train_test_split
-
-
-def delivery_partners(df, given_info, total_onshift_partners = False, total_busy_partners = False, total_outstanding_orders = False):
-    if (total_onshift_partners == True):
-        total_onshift_partners = given_info[(given_info.created_at_weekday == df.created_at_weekday) & (given_info.created_at_hour == df.created_at_hour)]["total_onshift_partners"]
-        return total_onshift_partners.iloc[0]
-    if (total_busy_partners == True):
-        total_busy_partners = given_info[(given_info.created_at_weekday == df.created_at_weekday) & (given_info.created_at_hour == df.created_at_hour)]["total_busy_partners"]
-        return total_busy_partners.iloc[0]
-    if (total_outstanding_orders == True):
-        total_outstanding_orders = given_info[(given_info.created_at_weekday == df.created_at_weekday) & (given_info.created_at_hour == df.created_at_hour)]["total_outstanding_orders"]
-        return total_outstanding_orders.iloc[0]
-    return "atleast choose one"
-
-def order_protocol_value(df, given_info):
-    order_protocol = given_info[(given_info.created_at_weekday == df.created_at_weekday) & (given_info.market_id == df.market_id)]["order_protocol"]
-    return order_protocol.iloc[0]
-
-def store_category(df, given_info, most_store_primary_category):
-    required_data = given_info[(given_info.created_at_hour == df.created_at_hour) & (given_info.created_at_weekday == df.created_at_weekday) & (given_info.market_id == df.market_id) & (given_info.store_id == df.store_id)][["store_primary_category", "subtotal"]]
-    if required_data.shape[0] == 0:
-        required_data = given_info[(given_info.created_at_hour == df.created_at_hour) & (given_info.created_at_weekday == df.created_at_weekday) & (given_info.market_id == df.market_id)][["store_primary_category", "subtotal"]]
-    if required_data.shape[0] == 0:
-        required_data = given_info[(given_info.created_at_hour == df.created_at_hour) & (given_info.created_at_weekday == df.created_at_weekday)][["store_primary_category", "subtotal"]]
-    if required_data.shape[0] == 0:
-        required_data = given_info[(given_info.created_at_hour == df.created_at_hour)][["store_primary_category", "subtotal"]]
-    if required_data.shape[0] == 0:
-        return most_store_primary_category    
-    
-    required_data["subtotal_diff"] = abs(required_data["subtotal"] - df.subtotal)
-    required_data.sort_values(by = ["subtotal_diff"], ascending = True, inplace = True)
-    return required_data.iloc[0,0]
-    
-
+from functions import delivery_partners, order_protocol_value, store_category
 
 df = pd.read_csv("datasets/dataset.csv")
+
+# df.market_id = df.market_id.astype("category")
+# df.order_protocol = df.order_protocol.astype("category")
+# df.store_primary_category = df.store_primary_category.astype("category")
+
 print("--" * 90)
 print(f"shape of intial data = {df.shape}")
 print("--" * 90)
@@ -141,7 +116,6 @@ print(f"remaining missing valued features (test_data) = {X_test.columns[X_test.i
 print("--" * 90)
 
 print(f"filling NaN values in store_primary_category\n{'--' * 50}")
-print("--" * 50)
 store_categories = X_train.groupby(by = ["created_at_hour", "created_at_weekday", "store_primary_category", "market_id", "store_id"])[["subtotal"]].apply("mean").reset_index()
 most_store_primary_category = X_train.store_primary_category.mode()[0]
 X_train.loc[X_train.store_primary_category.isna(), "store_primary_category"] = X_train[X_train.store_primary_category.isna()].apply(store_category, given_info = store_categories, most_store_primary_category = most_store_primary_category, axis = 1)
